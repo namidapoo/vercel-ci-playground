@@ -3,6 +3,7 @@ name: Vercel Preview Deployment
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  ENV_NAME: preview-${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -11,9 +12,24 @@ on:
       - main
 
 jobs:
-  Deploy-Preview:
+  deploy:
+    name: Deploy to Vercel
     runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+      contents: read
+    outputs:
+      url: ${{ steps.deploy-url.outputs.url }}
+      inspect_url: ${{ steps.deploy-url.outputs.inspect_url }}
     steps:
+      - name: Start deployment
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ github.token }}
+          env: ${{ env.ENV_NAME }}
+
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
@@ -40,4 +56,104 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        id: deploy-url
+        run: |
+          vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > deploy_output.txt 2>&1
+          
+          # Preview URL抽出
+          PREVIEW_URL=$(cat deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
+          
+          # Inspect URL抽出 
+          INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
+          
+          echo "Preview URL: $PREVIEW_URL"
+          echo "Inspect URL: $INSPECT_URL"
+          
+          echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
+
+      - name: Update deployment status
+        uses: bobheadxi/deployments@v1
+        if: always()
+        with:
+          step: finish
+          token: ${{ github.token }}
+          status: ${{ job.status }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: ${{ steps.deploy-url.outputs.url }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          desc: "Preview deployed"
+
+  check-if-pr-exists:
+    needs: deploy
+    name: Check if associated PR exists
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.get-pr-number.outputs.pr-number }}
+    steps:
+      - name: Get associated PRs
+        id: prs
+        run: >
+          echo "pulls=$(gh api -H "Accept: application/vnd.github.v3+json" -X GET
+          /repos/${{ github.repository }}/pulls
+          -f state=open
+          -f head=${{ github.repository_owner }}:${{ github.ref_name }})" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Get PR number
+        id: get-pr-number
+        run: |
+          if [ "${{ fromJSON(env.PULL) }}" ]; then
+            echo "pr-number=${{ fromJSON(env.PULL).number }}" >> $GITHUB_OUTPUT;
+          else
+            echo "pr-number=0" >> $GITHUB_OUTPUT;
+          fi
+        env:
+          PULL: ${{ toJSON(fromJSON(steps.prs.outputs.pulls)[0]) }}
+
+  comment:
+    needs:
+      - deploy
+      - check-if-pr-exists
+    name: Comment on PR
+    if: needs.check-if-pr-exists.outputs.pr-number != 0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find Comment
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-author: github-actions[bot]
+          body-includes: Preview Deployment
+
+      - name: Get datetime for now
+        id: datetime
+        run: |
+          echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "short_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ✅ **Status**: Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }}))
+            🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
+            📝 **Branch**: `${{ github.ref_name }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
+          edit-mode: replace

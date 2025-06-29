@@ -1,0 +1,127 @@
+name: Comment on PR about Deployment
+
+env:
+  ENV_NAME: preview-${{ github.head_ref }}
+
+on:
+  pull_request:
+    types:
+      - opened
+
+jobs:
+  check-if-deployment-exists:
+    name: Check if a successful deployment exists
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      state: ${{ steps.get-status.outputs.state }}
+      url: ${{ steps.get-status.outputs.url }}
+      inspect_url: ${{ steps.get-status.outputs.inspect_url }}
+    steps:
+      - name: Get associated deployments
+        id: get-deployments
+        run: >
+          echo "deployments=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }})" >> $GITHUB_OUTPUT
+
+      - name: Get statuses of the deployment
+        id: get-statuses
+        if: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id != null }}
+        run: >
+          echo "statuses=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments/${{ env.DEP_ID }}/statuses)" >> $GITHUB_OUTPUT
+        env:
+          DEP_ID: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id }}
+
+      - name: Get latest status of the deployment
+        id: get-status
+        if: ${{ steps.get-statuses.outputs.statuses != '' }}
+        run: |
+          echo "state=${{ fromJSON(env.STATUS).state }}" >> $GITHUB_OUTPUT
+          echo "url=${{ fromJSON(env.STATUS).environment_url }}" >> $GITHUB_OUTPUT
+          
+          # descriptionからInspect URLを抽出
+          DESCRIPTION="${{ fromJSON(env.STATUS).description }}"
+          if [[ "$DESCRIPTION" == *"Inspect:"* ]]; then
+            INSPECT_URL=$(echo "$DESCRIPTION" | grep -o 'Inspect: [^|]*' | sed 's/Inspect: //')
+            echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
+          else
+            echo "inspect_url=" >> $GITHUB_OUTPUT
+          fi
+        env:
+          STATUS: ${{ toJSON(fromJSON(steps.get-statuses.outputs.statuses)[0]) }}
+
+  comment:
+    needs: check-if-deployment-exists
+    name: Comment on PR
+    if: needs.check-if-deployment-exists.outputs.state != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Find Comment
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: Preview Deployment
+
+      - name: Get datetime for now
+        id: datetime
+        run: |
+          echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          SHORT_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "short_sha=${SHORT_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR if the deployment has completed
+        if: needs.check-if-deployment-exists.outputs.state == 'success'
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ✅ **Status**: Ready${{ needs.check-if-deployment-exists.outputs.inspect_url != '' && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }}
+            🔗 **Preview**: [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }})
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
+          edit-mode: replace
+
+      - name: Create comment if the deployment has not completed
+        if: needs.check-if-deployment-exists.outputs.state == 'in_progress'
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ⏳ **Status**: In Progress
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
+          edit-mode: replace
+
+      - name: Create comment if deployment is starting
+        if: needs.check-if-deployment-exists.outputs.state == null
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ⏳ **Status**: Starting
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
