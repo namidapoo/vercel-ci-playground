@@ -58,29 +58,29 @@ jobs:
       - name: Deploy Project Artifacts to Vercel
         id: deploy-url
         run: |
-          DEPLOY_OUTPUT=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "$DEPLOY_OUTPUT"
+          echo "=== Starting Vercel Deploy ==="
+          vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > deploy_output.txt 2>&1
           
-          # Preview URL抽出
-          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
+          echo "=== Full Deploy Output ==="
+          cat deploy_output.txt
+          
+          echo "=== Extracting URLs ==="
+          # Preview URL抽出 (最後の行のURLを取得)
+          PREVIEW_URL=$(tail -1 deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' || true)
           if [ -z "$PREVIEW_URL" ]; then
-            echo "Warning: Preview URL not found"
-            PREVIEW_URL=""
+            # 出力全体から検索
+            PREVIEW_URL=$(cat deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
           fi
           
-          # Inspect URL抽出
-          INSPECT_LINE=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" || true)
-          echo "Inspect line: $INSPECT_LINE"
-          INSPECT_URL=$(echo "$INSPECT_LINE" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
-          if [ -z "$INSPECT_URL" ] || [ "$INSPECT_URL" = "$INSPECT_LINE" ]; then
-            echo "Warning: Inspect URL not found or extraction failed"
-            INSPECT_URL=""
-          fi
+          # Inspect URL抽出 
+          INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
+          
+          echo "=== Extracted Results ==="
+          echo "Preview URL: $PREVIEW_URL"
+          echo "Inspect URL: $INSPECT_URL"
           
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
-          echo "Preview URL: $PREVIEW_URL"
-          echo "Inspect URL: $INSPECT_URL"
 
       - name: Update deployment status
         uses: bobheadxi/deployments@v1
