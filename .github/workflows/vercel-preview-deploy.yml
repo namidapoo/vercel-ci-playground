@@ -141,12 +141,14 @@ jobs:
         with:
           issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
           comment-author: github-actions[bot]
-          body-includes: Preview Deployment
+          body-includes: Deploy to Vercel
 
       - name: Get datetime for now
         id: datetime
         run: |
-          echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          # JST (UTC+9) の時刻を取得
+          JST_TIME=$(TZ=Asia/Tokyo date +'%b %d, %Y %I:%M%p' | sed 's/AM/am/g; s/PM/pm/g')
+          echo "value=$JST_TIME" >> $GITHUB_OUTPUT
           echo "short_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: Create or update comment
@@ -155,10 +157,9 @@ jobs:
           issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
           comment-id: ${{ steps.fc.outputs.comment-id }}
           body: |
-            ## 🚀 Preview Deployment - ${{ needs.deploy.outputs.project_name }}
+            **Deploy to Vercel**
             
-            ✅ **Status**: Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }}))
-            🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
-            📅 **Updated**: ${{ steps.datetime.outputs.value }}
-            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
+            | Name | Status | Preview | Updated (JST) |
+            | :--- | :----- | :------ | :------------ |
+            | **${{ needs.deploy.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy.outputs.url }}) | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
