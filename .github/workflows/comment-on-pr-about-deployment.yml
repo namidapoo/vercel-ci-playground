@@ -82,6 +82,7 @@ jobs:
             🔗 **Preview**: [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }})
             📝 **Branch**: `${{ github.head_ref }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ github.event.pull_request.head.sha }}`
           edit-mode: replace
 
       - name: Create comment if the deployment has not completed
@@ -96,6 +97,7 @@ jobs:
             ⏳ **Status**: In Progress
             📝 **Branch**: `${{ github.head_ref }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ github.event.pull_request.head.sha }}`
           edit-mode: replace
 
       - name: Create comment if deployment is starting
@@ -109,3 +111,4 @@ jobs:
             ⏳ **Status**: Starting
             📝 **Branch**: `${{ github.head_ref }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ github.event.pull_request.head.sha }}`

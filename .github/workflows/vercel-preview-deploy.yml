@@ -143,4 +143,5 @@ jobs:
             🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
             📝 **Branch**: `${{ github.ref_name }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
+            📋 **Commit**: `${{ github.sha }}`
           edit-mode: replace
