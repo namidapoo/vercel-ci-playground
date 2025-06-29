@@ -58,24 +58,14 @@ jobs:
       - name: Deploy Project Artifacts to Vercel
         id: deploy-url
         run: |
-          echo "=== Starting Vercel Deploy ==="
           vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > deploy_output.txt 2>&1
           
-          echo "=== Full Deploy Output ==="
-          cat deploy_output.txt
-          
-          echo "=== Extracting URLs ==="
-          # Preview URL抽出 (最後の行のURLを取得)
-          PREVIEW_URL=$(tail -1 deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' || true)
-          if [ -z "$PREVIEW_URL" ]; then
-            # 出力全体から検索
-            PREVIEW_URL=$(cat deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
-          fi
+          # Preview URL抽出
+          PREVIEW_URL=$(cat deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
           
           # Inspect URL抽出 
           INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
           
-          echo "=== Extracted Results ==="
           echo "Preview URL: $PREVIEW_URL"
           echo "Inspect URL: $INSPECT_URL"
           
@@ -92,7 +82,7 @@ jobs:
           env: ${{ steps.deployment.outputs.env }}
           env_url: ${{ steps.deploy-url.outputs.url }}
           deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-          desc: "Preview: ${{ steps.deploy-url.outputs.url }} | Inspect: ${{ steps.deploy-url.outputs.inspect_url }}"
+          desc: "Preview deployed"
 
   check-if-pr-exists:
     needs: deploy
