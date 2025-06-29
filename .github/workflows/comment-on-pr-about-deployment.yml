@@ -1,94 +1,111 @@
 name: Comment on PR about Deployment
 
+env:
+  ENV_NAME: preview-${{ github.head_ref }}
+
 on:
   pull_request:
-    types: [opened, synchronize]
+    types:
+      - opened
 
 jobs:
-  comment-deployment-status:
+  check-if-deployment-exists:
+    name: Check if a successful deployment exists
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      state: ${{ steps.get-status.outputs.state }}
+      url: ${{ steps.get-status.outputs.url }}
+    steps:
+      - name: Get associated deployments
+        id: get-deployments
+        run: >
+          echo "deployments=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }})" >> $GITHUB_OUTPUT
+
+      - name: Get statuses of the deployment
+        id: get-statuses
+        if: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id != null }}
+        run: >
+          echo "statuses=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments/${{ env.DEP_ID }}/statuses)" >> $GITHUB_OUTPUT
+        env:
+          DEP_ID: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id }}
+
+      - name: Get latest status of the deployment
+        id: get-status
+        if: ${{ steps.get-statuses.outputs.statuses != '' }}
+        run: |
+          echo "state=${{ fromJSON(env.STATUS).state }}" >> $GITHUB_OUTPUT
+          echo "url=${{ fromJSON(env.STATUS).environment_url }}" >> $GITHUB_OUTPUT
+        env:
+          STATUS: ${{ toJSON(fromJSON(steps.get-statuses.outputs.statuses)[0]) }}
+
+  comment:
+    needs: check-if-deployment-exists
+    name: Comment on PR
+    if: needs.check-if-deployment-exists.outputs.state != null
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
       pull-requests: write
-      actions: read
     steps:
-      - name: Check deployment status and comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          
-          # デプロイワークフローの実行状況を確認
-          WORKFLOW_RUN=$(gh api repos/${{ github.repository }}/actions/workflows/vercel-preview-deploy.yml/runs \
-            --jq ".workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\") | {id, status, conclusion}" \
-            | head -1 | tr -d '\n')
-          
-          echo "Workflow run data: $WORKFLOW_RUN"
-          
-          if [ -n "$WORKFLOW_RUN" ] && [ "$WORKFLOW_RUN" != "null" ] && [ "$WORKFLOW_RUN" != "" ]; then
-            STATUS=$(echo "$WORKFLOW_RUN" | jq -r '.status // "unknown"')
-            CONCLUSION=$(echo "$WORKFLOW_RUN" | jq -r '.conclusion // "unknown"')
-            RUN_ID=$(echo "$WORKFLOW_RUN" | jq -r '.id // ""')
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Find Comment
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: Preview Deployment
+
+      - name: Get datetime for now
+        id: datetime
+        run: echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR if the deployment has completed
+        if: needs.check-if-deployment-exists.outputs.state == 'success'
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
             
-            echo "Workflow status: $STATUS, conclusion: $CONCLUSION"
+            ✅ **Status**: Ready ([Inspect](https://vercel.com))
+            🔗 **Preview**: [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }})
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+          edit-mode: replace
+
+      - name: Create comment if the deployment has not completed
+        if: needs.check-if-deployment-exists.outputs.state == 'in_progress'
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
             
-            if [ "$STATUS" = "completed" ] && [ "$CONCLUSION" = "success" ]; then
-              # デプロイ成功済み - ワークフローの出力からPreview URLを取得
-              DEPLOY_OUTPUT=$(gh api repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs --jq '.jobs[0].steps[] | select(.name | contains("Deploy Project Artifacts")) | .conclusion')
-              
-              if [ "$DEPLOY_OUTPUT" = "success" ]; then
-                # ログからPreview URLを抽出（簡易版）
-                LOGS=$(gh api repos/${{ github.repository }}/actions/runs/$RUN_ID/logs)
-                
-                COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
-          ## 🚀 Preview Deployment
-          
-          ✅ **Status**: Ready ([Inspect](https://vercel.com))
-          🔗 **Preview**: [Visit Preview](https://vercel.com/${{ github.repository }})
-          📝 **Branch**: \`$BRANCH_NAME\`
-          📅 **Updated**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          "
-              else
-                COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
-          ## 🚀 Preview Deployment
-          
-          ❌ **Status**: Failed
-          📝 **Branch**: \`$BRANCH_NAME\`
-          📅 **Updated**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          "
-              fi
-            else
-              # デプロイ中またはまだ開始されていない
-              COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
-          ## 🚀 Preview Deployment
-          
-          ⏳ **Status**: In Progress
-          📝 **Branch**: \`$BRANCH_NAME\`
-          📅 **Updated**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          "
-            fi
-          else
-            # ワークフローがまだ開始されていない
-            COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
-          ## 🚀 Preview Deployment
-          
-          ⏳ **Status**: Starting
-          📝 **Branch**: \`$BRANCH_NAME\`
-          📅 **Updated**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          "
-          fi
-          
-          # コメントの投稿/更新
-          COMMENT_ID=$(gh pr comment list $PR_NUMBER --json body,id --jq ".[] | select(.body | contains(\"vercel-preview-comment:$COMMIT_SHA\")) | .id")
-          
-          if [ -z "$COMMENT_ID" ]; then
-            # 新規コメント作成
-            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
-            echo "Created new comment on PR #$PR_NUMBER"
-          else
-            # 既存コメント更新
-            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID --method PATCH --field body="$COMMENT_BODY"
-            echo "Updated existing comment on PR #$PR_NUMBER"
-          fi
+            ⏳ **Status**: In Progress
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+          edit-mode: replace
+
+      - name: Create comment if deployment is starting
+        if: needs.check-if-deployment-exists.outputs.state == null
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ⏳ **Status**: Starting
+            📝 **Branch**: `${{ github.head_ref }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}

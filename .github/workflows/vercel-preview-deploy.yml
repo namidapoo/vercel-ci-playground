@@ -3,6 +3,7 @@ name: Vercel Preview Deployment
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  ENV_NAME: preview-${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -11,12 +12,23 @@ on:
       - main
 
 jobs:
-  Deploy-Preview:
+  deploy:
+    name: Deploy to Vercel
     runs-on: ubuntu-latest
     permissions:
+      deployments: write
       contents: read
-      pull-requests: write
+    outputs:
+      url: ${{ steps.deploy-url.outputs.url }}
     steps:
+      - name: Start deployment
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ github.token }}
+          env: ${{ env.ENV_NAME }}
+
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
@@ -43,51 +55,92 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
-        id: deploy
+        id: deploy-url
         run: |
           DEPLOY_OUTPUT=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "$DEPLOY_OUTPUT"
           PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
-          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
-          echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "Preview URL: $PREVIEW_URL"
 
-      - name: Comment on PR
-        if: ${{ steps.deploy.outputs.preview_url != '' }}
+      - name: Update deployment status
+        uses: bobheadxi/deployments@v1
+        if: always()
+        with:
+          step: finish
+          token: ${{ github.token }}
+          status: ${{ job.status }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: ${{ steps.deploy-url.outputs.url }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+
+  check-if-pr-exists:
+    needs: deploy
+    name: Check if associated PR exists
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.get-pr-number.outputs.pr-number }}
+    steps:
+      - name: Get associated PRs
+        id: prs
+        run: >
+          echo "pulls=$(gh api -H "Accept: application/vnd.github.v3+json" -X GET
+          /repos/${{ github.repository }}/pulls
+          -f state=open
+          -f head=${{ github.repository_owner }}:${{ github.ref_name }})" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Get PR number
+        id: get-pr-number
         run: |
-          # PR番号を取得
-          PR_NUMBER=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
-          
-          if [ "$PR_NUMBER" != "null" ] && [ -n "$PR_NUMBER" ]; then
-            COMMIT_SHA="${{ github.sha }}"
-            PREVIEW_URL="${{ steps.deploy.outputs.preview_url }}"
-            BRANCH_NAME="${{ github.ref_name }}"
-            DEPLOY_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-            
-            # コメント内容を作成
-            COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
-          ## 🚀 Preview Deployment
-          
-          ✅ **Status**: Ready ([Inspect](https://vercel.com))
-          🔗 **Preview**: [Visit Preview]($PREVIEW_URL)
-          📝 **Branch**: \`$BRANCH_NAME\`
-          📅 **Updated**: $DEPLOY_TIME
-          "
-            
-            # 既存コメントを検索
-            COMMENT_ID=$(gh pr comment list $PR_NUMBER --json body,id --jq ".[] | select(.body | contains(\"vercel-preview-comment:$COMMIT_SHA\")) | .id")
-            
-            if [ -z "$COMMENT_ID" ]; then
-              # 新規コメント作成
-              gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
-              echo "Created new comment on PR #$PR_NUMBER"
-            else
-              # 既存コメント更新
-              gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID --method PATCH --field body="$COMMENT_BODY"
-              echo "Updated existing comment on PR #$PR_NUMBER"
-            fi
+          if [ "${{ fromJSON(env.PULL) }}" ]; then
+            echo "pr-number=${{ fromJSON(env.PULL).number }}" >> $GITHUB_OUTPUT;
           else
-            echo "No PR found for branch ${{ github.ref_name }}"
+            echo "pr-number=0" >> $GITHUB_OUTPUT;
           fi
+        env:
+          PULL: ${{ toJSON(fromJSON(steps.prs.outputs.pulls)[0]) }}
+
+  comment:
+    needs:
+      - deploy
+      - check-if-pr-exists
+    name: Comment on PR
+    if: needs.check-if-pr-exists.outputs.pr-number != 0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find Comment
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-author: github-actions[bot]
+          body-includes: Preview Deployment
+
+      - name: Get datetime for now
+        id: datetime
+        run: echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            ## 🚀 Preview Deployment
+            
+            ✅ **Status**: Ready ([Inspect](https://vercel.com))
+            🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
+            📝 **Branch**: `${{ github.ref_name }}`
+            📅 **Updated**: ${{ steps.datetime.outputs.value }}
+          edit-mode: replace
