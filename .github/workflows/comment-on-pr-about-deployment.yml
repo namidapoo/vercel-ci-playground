@@ -118,42 +118,24 @@ jobs:
           SHORT_SHA="${{ github.event.pull_request.head.sha }}"
           echo "short_sha=${SHORT_SHA:0:7}" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR if the deployment has completed
-        if: needs.check-if-deployment-exists.outputs.state == 'success'
+      - name: Create or update deployment comment
         uses: peter-evans/create-or-update-comment@v2
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.fc.outputs.comment-id }}
-          body: |
-            **Deploy to Vercel**
-            
-            | Name | Status | Preview | Latest Commit | Updated (JST) |
-            | :--- | :----- | :------ | :------------ | :------------ |
-            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ✅ Ready${{ needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }} | [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
-
-      - name: Create comment if the deployment has not completed
-        if: needs.check-if-deployment-exists.outputs.state == 'in_progress'
-        uses: peter-evans/create-or-update-comment@v2
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-id: ${{ steps.fc.outputs.comment-id }}
           body: |
             **Deploy to Vercel**
             
             | Name | Status | Preview | Latest Commit | Updated (JST) |
             | :--- | :----- | :------ | :------------ | :------------ |
-            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ⏳ In Progress | - | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
-          edit-mode: replace
-
-      - name: Create comment if deployment is starting
-        if: needs.check-if-deployment-exists.outputs.state == null
-        uses: peter-evans/create-or-update-comment@v2
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            **Deploy to Vercel**
-            
-            | Name | Status | Preview | Latest Commit | Updated (JST) |
-            | :--- | :----- | :------ | :------------ | :------------ |
-            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ⏳ Starting | - | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
+            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ${{
+              needs.check-if-deployment-exists.outputs.state == 'success' && 
+              format('✅ Ready{0}', needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '') ||
+              needs.check-if-deployment-exists.outputs.state == 'in_progress' && '⏳ In Progress' ||
+              '⏳ Starting'
+            }} | ${{
+              needs.check-if-deployment-exists.outputs.state == 'success' && 
+              format('[Visit Preview]({0})', needs.check-if-deployment-exists.outputs.url) ||
+              '-'
+            }} | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
