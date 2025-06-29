@@ -60,8 +60,21 @@ jobs:
         run: |
           DEPLOY_OUTPUT=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "$DEPLOY_OUTPUT"
-          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
-          INSPECT_URL=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" | grep -o 'https://vercel\.com/[^[:space:]]*')
+          
+          # Preview URL抽出
+          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "Warning: Preview URL not found"
+            PREVIEW_URL=""
+          fi
+          
+          # Inspect URL抽出
+          INSPECT_URL=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" | grep -o 'https://vercel\.com/[^[:space:]]*' || true)
+          if [ -z "$INSPECT_URL" ]; then
+            echo "Warning: Inspect URL not found"
+            INSPECT_URL=""
+          fi
+          
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
           echo "Preview URL: $PREVIEW_URL"
