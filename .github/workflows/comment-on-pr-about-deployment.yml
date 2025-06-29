@@ -45,8 +45,8 @@ jobs:
           
           # descriptionからInspect URLを抽出
           DESCRIPTION="${{ fromJSON(env.STATUS).description }}"
-          if [[ "$DESCRIPTION" == *"Inspect:"* ]]; then
-            INSPECT_URL=$(echo "$DESCRIPTION" | grep -o 'Inspect: [^|]*' | sed 's/Inspect: //')
+          if [[ "$DESCRIPTION" == inspect:* ]]; then
+            INSPECT_URL="${DESCRIPTION#inspect:}"
             echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
           else
             echo "inspect_url=" >> $GITHUB_OUTPUT
@@ -91,7 +91,7 @@ jobs:
           body: |
             ## 🚀 Preview Deployment
             
-            ✅ **Status**: Ready${{ needs.check-if-deployment-exists.outputs.inspect_url != '' && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }}
+            ✅ **Status**: Ready${{ needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }}
             🔗 **Preview**: [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }})
             📝 **Branch**: `${{ github.head_ref }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
