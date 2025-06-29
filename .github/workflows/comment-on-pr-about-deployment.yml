@@ -93,9 +93,9 @@ jobs:
           body: |
             **Deploy to Vercel**
             
-            | Name | Status | Preview | Updated (JST) |
-            | :--- | :----- | :------ | :------------ |
-            | **vercel-ci-playground** | ✅ Ready${{ needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }} | [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }}) | ${{ steps.datetime.outputs.value }} |
+            | Name | Status | Preview | Latest Commit | Updated (JST) |
+            | :--- | :----- | :------ | :------------ | :------------ |
+            | **vercel-ci-playground** | ✅ Ready${{ needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '' }} | [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
 
       - name: Create comment if the deployment has not completed
@@ -107,9 +107,9 @@ jobs:
           body: |
             **Deploy to Vercel**
             
-            | Name | Status | Preview | Updated (JST) |
-            | :--- | :----- | :------ | :------------ |
-            | **vercel-ci-playground** | ⏳ In Progress | - | ${{ steps.datetime.outputs.value }} |
+            | Name | Status | Preview | Latest Commit | Updated (JST) |
+            | :--- | :----- | :------ | :------------ | :------------ |
+            | **vercel-ci-playground** | ⏳ In Progress | - | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
 
       - name: Create comment if deployment is starting
@@ -120,6 +120,6 @@ jobs:
           body: |
             **Deploy to Vercel**
             
-            | Name | Status | Preview | Updated (JST) |
-            | :--- | :----- | :------ | :------------ |
-            | **vercel-ci-playground** | ⏳ Starting | - | ${{ steps.datetime.outputs.value }} |
+            | Name | Status | Preview | Latest Commit | Updated (JST) |
+            | :--- | :----- | :------ | :------------ | :------------ |
+            | **vercel-ci-playground** | ⏳ Starting | - | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |

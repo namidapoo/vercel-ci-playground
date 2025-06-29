@@ -159,7 +159,7 @@ jobs:
           body: |
             **Deploy to Vercel**
             
-            | Name | Status | Preview | Updated (JST) |
-            | :--- | :----- | :------ | :------------ |
-            | **${{ needs.deploy.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy.outputs.url }}) | ${{ steps.datetime.outputs.value }} |
+            | Name | Status | Preview | Latest Commit | Updated (JST) |
+            | :--- | :----- | :------ | :------------ | :------------ |
+            | **${{ needs.deploy.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
