@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Testing PR Opened Workflow
+
+This change is made to test the PR opened trigger in the deployment comment workflow.
+
 ## Getting Started
 
 First, run the development server:
