@@ -22,44 +22,59 @@ jobs:
       inspect_url: ${{ steps.get-status.outputs.inspect_url }}
       project_name: ${{ steps.get-status.outputs.project_name }}
     steps:
-      - name: Get associated deployments
-        id: get-deployments
-        run: >
-          echo "deployments=$(gh api -H "Accept: application/vnd.github.v3+json"
-          /repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }})" >> $GITHUB_OUTPUT
-
-      - name: Get statuses of the deployment
-        id: get-statuses
-        if: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id != null }}
-        run: >
-          echo "statuses=$(gh api -H "Accept: application/vnd.github.v3+json"
-          /repos/${{ github.repository }}/deployments/${{ env.DEP_ID }}/statuses)" >> $GITHUB_OUTPUT
-        env:
-          DEP_ID: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id }}
-
-      - name: Get latest status of the deployment
+      - name: Get deployment status
         id: get-status
-        if: ${{ steps.get-statuses.outputs.statuses != '' }}
         run: |
-          echo "state=${{ fromJSON(env.STATUS).state }}" >> $GITHUB_OUTPUT
-          echo "url=${{ fromJSON(env.STATUS).environment_url }}" >> $GITHUB_OUTPUT
+          set -e
           
-          # descriptionからInspect URLとプロジェクト名を抽出
-          DESCRIPTION="${{ fromJSON(env.STATUS).description }}"
+          # Get deployments for the environment
+          DEPLOYMENTS=$(gh api -H "Accept: application/vnd.github.v3+json" \
+            "/repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }}" || echo "[]")
+          
+          # Check if any deployments exist
+          if [ "$(echo "$DEPLOYMENTS" | jq 'length')" -eq 0 ]; then
+            echo "state=" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            echo "inspect_url=" >> $GITHUB_OUTPUT
+            echo "project_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get the latest deployment ID
+          DEP_ID=$(echo "$DEPLOYMENTS" | jq -r '.[0].id')
+          
+          # Get deployment statuses
+          STATUSES=$(gh api -H "Accept: application/vnd.github.v3+json" \
+            "/repos/${{ github.repository }}/deployments/${DEP_ID}/statuses" || echo "[]")
+          
+          # Check if any statuses exist
+          if [ "$(echo "$STATUSES" | jq 'length')" -eq 0 ]; then
+            echo "state=" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            echo "inspect_url=" >> $GITHUB_OUTPUT
+            echo "project_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get the latest status
+          LATEST_STATUS=$(echo "$STATUSES" | jq '.[0]')
+          STATE=$(echo "$LATEST_STATUS" | jq -r '.state')
+          URL=$(echo "$LATEST_STATUS" | jq -r '.environment_url // ""')
+          DESCRIPTION=$(echo "$LATEST_STATUS" | jq -r '.description // ""')
+          
+          echo "state=$STATE" >> $GITHUB_OUTPUT
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          
+          # Extract inspect URL and project name from description
           if [[ "$DESCRIPTION" == inspect:* ]]; then
-            # Inspect URL抽出: inspect:URL|project:NAME 形式から URL部分を取得
-            INSPECT_URL=$(echo "$DESCRIPTION" | sed 's/inspect:\([^|]*\).*/\1/' || echo "")
+            INSPECT_URL=$(echo "$DESCRIPTION" | grep -o 'inspect:[^|]*' | cut -d: -f2- || echo "")
+            PROJECT_NAME=$(echo "$DESCRIPTION" | grep -o 'project:[^|]*' | cut -d: -f2- || echo "${{ github.event.repository.name }}")
             echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
-            
-            # プロジェクト名抽出: project:NAME 部分から NAME を取得
-            PROJECT_NAME=$(echo "$DESCRIPTION" | sed 's/.*|project:\([^|]*\).*/\1/' || echo "${{ github.event.repository.name }}")
             echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
           else
             echo "inspect_url=" >> $GITHUB_OUTPUT
             echo "project_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
           fi
-        env:
-          STATUS: ${{ toJSON(fromJSON(steps.get-statuses.outputs.statuses)[0]) }}
 
   comment:
     needs: check-if-deployment-exists
