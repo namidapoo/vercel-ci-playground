@@ -21,6 +21,7 @@ jobs:
     outputs:
       url: ${{ steps.deploy-url.outputs.url }}
       inspect_url: ${{ steps.deploy-url.outputs.inspect_url }}
+      project_name: ${{ steps.deploy-url.outputs.project_name }}
     steps:
       - name: Start deployment
         uses: bobheadxi/deployments@v1
@@ -66,11 +67,16 @@ jobs:
           # Inspect URL抽出 
           INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
           
+          # プロジェクト名抽出
+          PROJECT_NAME=$(cat deploy_output.txt | grep "To deploy to production" | sed 's/.*(\([^)]*\)\.vercel\.app).*/\1/' || true)
+          
           echo "Preview URL: $PREVIEW_URL"
           echo "Inspect URL: $INSPECT_URL"
+          echo "Project Name: $PROJECT_NAME"
           
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
+          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
 
       - name: Update deployment status
         uses: bobheadxi/deployments@v1
@@ -82,7 +88,7 @@ jobs:
           env: ${{ steps.deployment.outputs.env }}
           env_url: ${{ steps.deploy-url.outputs.url }}
           deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-          desc: "inspect:${{ steps.deploy-url.outputs.inspect_url }}"
+          desc: "inspect:${{ steps.deploy-url.outputs.inspect_url }}|project:${{ steps.deploy-url.outputs.project_name }}"
 
   check-if-pr-exists:
     needs: deploy
@@ -135,12 +141,14 @@ jobs:
         with:
           issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
           comment-author: github-actions[bot]
-          body-includes: Preview Deployment
+          body-includes: Deploy to Vercel
 
       - name: Get datetime for now
         id: datetime
         run: |
-          echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          # JST (UTC+9) の時刻を取得
+          JST_TIME=$(TZ=Asia/Tokyo date +'%b %d, %Y %I:%M%p' | sed 's/AM/am/g; s/PM/pm/g')
+          echo "value=$JST_TIME" >> $GITHUB_OUTPUT
           echo "short_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: Create or update comment
@@ -149,11 +157,9 @@ jobs:
           issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
           comment-id: ${{ steps.fc.outputs.comment-id }}
           body: |
-            ## 🚀 Preview Deployment
+            **Deploy to Vercel**
             
-            ✅ **Status**: Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }}))
-            🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
-            📝 **Branch**: `${{ github.ref_name }}`
-            📅 **Updated**: ${{ steps.datetime.outputs.value }}
-            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
+            | Name | Status | Preview | Latest Commit | Updated (JST) |
+            | :--- | :----- | :------ | :------------ | :------------ |
+            | **${{ needs.deploy.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
