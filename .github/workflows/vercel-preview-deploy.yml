@@ -20,6 +20,7 @@ jobs:
       contents: read
     outputs:
       url: ${{ steps.deploy-url.outputs.url }}
+      inspect_url: ${{ steps.deploy-url.outputs.inspect_url }}
     steps:
       - name: Start deployment
         uses: bobheadxi/deployments@v1
@@ -60,8 +61,11 @@ jobs:
           DEPLOY_OUTPUT=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "$DEPLOY_OUTPUT"
           PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+          INSPECT_URL=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" | grep -o 'https://vercel\.com/[^[:space:]]*')
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
           echo "Preview URL: $PREVIEW_URL"
+          echo "Inspect URL: $INSPECT_URL"
 
       - name: Update deployment status
         uses: bobheadxi/deployments@v1
@@ -141,7 +145,7 @@ jobs:
           body: |
             ## 🚀 Preview Deployment
             
-            ✅ **Status**: Ready ([Inspect](https://vercel.com))
+            ✅ **Status**: Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }}))
             🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
             📝 **Branch**: `${{ github.ref_name }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}

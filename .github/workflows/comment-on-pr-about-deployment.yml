@@ -81,7 +81,7 @@ jobs:
           body: |
             ## 🚀 Preview Deployment
             
-            ✅ **Status**: Ready ([Inspect](https://vercel.com))
+            ✅ **Status**: Ready
             🔗 **Preview**: [Visit Preview](${{ needs.check-if-deployment-exists.outputs.url }})
             📝 **Branch**: `${{ github.head_ref }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
