@@ -13,6 +13,9 @@ on:
 jobs:
   Deploy-Preview:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -40,4 +43,51 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        id: deploy
+        run: |
+          DEPLOY_OUTPUT=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "$DEPLOY_OUTPUT"
+          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: ${{ steps.deploy.outputs.preview_url != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # PR番号を取得
+          PR_NUMBER=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
+          
+          if [ "$PR_NUMBER" != "null" ] && [ -n "$PR_NUMBER" ]; then
+            COMMIT_SHA="${{ github.sha }}"
+            PREVIEW_URL="${{ steps.deploy.outputs.preview_url }}"
+            BRANCH_NAME="${{ github.ref_name }}"
+            DEPLOY_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            
+            # コメント内容を作成
+            COMMENT_BODY="<!-- vercel-preview-comment:$COMMIT_SHA -->
+          ## 🚀 Preview Deployment
+          
+          ✅ **Status**: Ready ([Inspect](https://vercel.com))
+          🔗 **Preview**: [Visit Preview]($PREVIEW_URL)
+          📝 **Branch**: \`$BRANCH_NAME\`
+          📅 **Updated**: $DEPLOY_TIME
+          "
+            
+            # 既存コメントを検索
+            COMMENT_ID=$(gh pr comment list $PR_NUMBER --json body,id --jq ".[] | select(.body | contains(\"vercel-preview-comment:$COMMIT_SHA\")) | .id")
+            
+            if [ -z "$COMMENT_ID" ]; then
+              # 新規コメント作成
+              gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+              echo "Created new comment on PR #$PR_NUMBER"
+            else
+              # 既存コメント更新
+              gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID --method PATCH --field body="$COMMENT_BODY"
+              echo "Updated existing comment on PR #$PR_NUMBER"
+            fi
+          else
+            echo "No PR found for branch ${{ github.ref_name }}"
+          fi
