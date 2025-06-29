@@ -69,9 +69,11 @@ jobs:
           fi
           
           # Inspect URL抽出
-          INSPECT_URL=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" | grep -o 'https://vercel\.com/[^[:space:]]*' || true)
-          if [ -z "$INSPECT_URL" ]; then
-            echo "Warning: Inspect URL not found"
+          INSPECT_LINE=$(echo "$DEPLOY_OUTPUT" | grep "Inspect:" || true)
+          echo "Inspect line: $INSPECT_LINE"
+          INSPECT_URL=$(echo "$INSPECT_LINE" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
+          if [ -z "$INSPECT_URL" ] || [ "$INSPECT_URL" = "$INSPECT_LINE" ]; then
+            echo "Warning: Inspect URL not found or extraction failed"
             INSPECT_URL=""
           fi
           
