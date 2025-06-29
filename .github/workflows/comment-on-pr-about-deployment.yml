@@ -42,7 +42,15 @@ jobs:
         run: |
           echo "state=${{ fromJSON(env.STATUS).state }}" >> $GITHUB_OUTPUT
           echo "url=${{ fromJSON(env.STATUS).environment_url }}" >> $GITHUB_OUTPUT
-          echo "inspect_url=${{ fromJSON(env.STATUS).target_url }}" >> $GITHUB_OUTPUT
+          
+          # descriptionからInspect URLを抽出
+          DESCRIPTION="${{ fromJSON(env.STATUS).description }}"
+          if [[ "$DESCRIPTION" == inspect:* ]]; then
+            INSPECT_URL="${DESCRIPTION#inspect:}"
+            echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
+          else
+            echo "inspect_url=" >> $GITHUB_OUTPUT
+          fi
         env:
           STATUS: ${{ toJSON(fromJSON(steps.get-statuses.outputs.statuses)[0]) }}
 
