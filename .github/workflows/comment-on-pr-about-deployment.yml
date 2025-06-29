@@ -67,8 +67,20 @@ jobs:
           
           # Extract inspect URL and project name from description
           if [[ "$DESCRIPTION" == inspect:* ]]; then
-            INSPECT_URL=$(echo "$DESCRIPTION" | grep -o 'inspect:[^|]*' | cut -d: -f2- || echo "")
-            PROJECT_NAME=$(echo "$DESCRIPTION" | grep -o 'project:[^|]*' | cut -d: -f2- || echo "${{ github.event.repository.name }}")
+            # Extract inspect URL: inspect:URL|project:NAME format
+            if [[ "$DESCRIPTION" =~ inspect:([^|]+) ]]; then
+              INSPECT_URL="${BASH_REMATCH[1]}"
+            else
+              INSPECT_URL=""
+            fi
+            
+            # Extract project name: project:NAME format
+            if [[ "$DESCRIPTION" =~ project:([^|]+) ]]; then
+              PROJECT_NAME="${BASH_REMATCH[1]}"
+            else
+              PROJECT_NAME="${{ github.event.repository.name }}"
+            fi
+            
             echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
             echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
           else
