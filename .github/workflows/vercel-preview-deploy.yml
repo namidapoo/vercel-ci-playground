@@ -21,6 +21,7 @@ jobs:
     outputs:
       url: ${{ steps.deploy-url.outputs.url }}
       inspect_url: ${{ steps.deploy-url.outputs.inspect_url }}
+      project_name: ${{ steps.deploy-url.outputs.project_name }}
     steps:
       - name: Start deployment
         uses: bobheadxi/deployments@v1
@@ -66,11 +67,16 @@ jobs:
           # Inspect URL抽出 
           INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
           
+          # プロジェクト名抽出
+          PROJECT_NAME=$(cat deploy_output.txt | grep "To deploy to production" | sed 's/.*(\([^)]*\)\.vercel\.app).*/\1/' || true)
+          
           echo "Preview URL: $PREVIEW_URL"
           echo "Inspect URL: $INSPECT_URL"
+          echo "Project Name: $PROJECT_NAME"
           
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
+          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
 
       - name: Update deployment status
         uses: bobheadxi/deployments@v1
@@ -149,11 +155,10 @@ jobs:
           issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
           comment-id: ${{ steps.fc.outputs.comment-id }}
           body: |
-            ## 🚀 Preview Deployment
+            ## 🚀 Preview Deployment - ${{ needs.deploy.outputs.project_name }}
             
             ✅ **Status**: Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }}))
             🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
-            📝 **Branch**: `${{ github.ref_name }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
             📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
           edit-mode: replace
