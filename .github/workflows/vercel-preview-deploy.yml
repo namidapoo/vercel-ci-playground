@@ -129,7 +129,9 @@ jobs:
 
       - name: Get datetime for now
         id: datetime
-        run: echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+        run: |
+          echo "value=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "short_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: Create or update comment
         uses: peter-evans/create-or-update-comment@v2
@@ -143,5 +145,5 @@ jobs:
             🔗 **Preview**: [Visit Preview](${{ needs.deploy.outputs.url }})
             📝 **Branch**: `${{ github.ref_name }}`
             📅 **Updated**: ${{ steps.datetime.outputs.value }}
-            📋 **Commit**: `${{ substr(github.sha, 0, 7) }}`
+            📋 **Commit**: `${{ steps.datetime.outputs.short_sha }}`
           edit-mode: replace
