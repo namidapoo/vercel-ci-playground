@@ -23,12 +23,14 @@ jobs:
           # デプロイワークフローの実行状況を確認
           WORKFLOW_RUN=$(gh api repos/${{ github.repository }}/actions/workflows/vercel-preview-deploy.yml/runs \
             --jq ".workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\") | {id, status, conclusion}" \
-            | head -1)
+            | head -1 | tr -d '\n')
           
-          if [ -n "$WORKFLOW_RUN" ]; then
-            STATUS=$(echo "$WORKFLOW_RUN" | jq -r '.status')
-            CONCLUSION=$(echo '$WORKFLOW_RUN' | jq -r '.conclusion')
-            RUN_ID=$(echo "$WORKFLOW_RUN" | jq -r '.id')
+          echo "Workflow run data: $WORKFLOW_RUN"
+          
+          if [ -n "$WORKFLOW_RUN" ] && [ "$WORKFLOW_RUN" != "null" ] && [ "$WORKFLOW_RUN" != "" ]; then
+            STATUS=$(echo "$WORKFLOW_RUN" | jq -r '.status // "unknown"')
+            CONCLUSION=$(echo "$WORKFLOW_RUN" | jq -r '.conclusion // "unknown"')
+            RUN_ID=$(echo "$WORKFLOW_RUN" | jq -r '.id // ""')
             
             echo "Workflow status: $STATUS, conclusion: $CONCLUSION"
             
