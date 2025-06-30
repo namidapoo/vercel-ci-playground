@@ -71,20 +71,38 @@ jobs:
         continue-on-error: false
         run: |
           vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > deploy_output.txt 2>&1
-          
+
           # Preview URL抽出
           PREVIEW_URL=$(cat deploy_output.txt | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1 || true)
-          
+
           # Inspect URL抽出 
           INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
-          
-          # プロジェクト名抽出
-          PROJECT_NAME=$(cat deploy_output.txt | grep "To deploy to production" | sed 's/.*(\([^)]*\)\.vercel\.app).*/\1/' || true)
-          
+
+          # プロジェクト名抽出（フォールバック戦略）
+          PROJECT_NAME=""
+
+          # deploy行から抽出
+          FROM_DEPLOY_LINE=$(cat deploy_output.txt | grep -o '[a-zA-Z0-9-]*-projects/[a-zA-Z0-9-]*' | cut -d'/' -f2 | head -1 || true)
+
+          # Inspect URLから抽出
+          FROM_INSPECT_URL_SED=$(echo "$INSPECT_URL" | sed 's/.*\/\([^\/]*\)\/\([^\/]*\)\/[^\/]*$/\2/' || true)
+          FROM_INSPECT_URL_AWK=$(echo "$INSPECT_URL" | awk -F'/' '{print $(NF-1)}' || true)
+
+          # フォールバック戦略で決定
+          if [ -n "$FROM_DEPLOY_LINE" ]; then
+            PROJECT_NAME="$FROM_DEPLOY_LINE"
+          elif [ -n "$FROM_INSPECT_URL_SED" ]; then
+            PROJECT_NAME="$FROM_INSPECT_URL_SED"
+          elif [ -n "$FROM_INSPECT_URL_AWK" ]; then
+            PROJECT_NAME="$FROM_INSPECT_URL_AWK"
+          else
+            PROJECT_NAME="${{ github.event.repository.name }}"
+          fi
+
           echo "Preview URL: $PREVIEW_URL"
           echo "Inspect URL: $INSPECT_URL"
           echo "Project Name: $PROJECT_NAME"
-          
+
           echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "inspect_url=$INSPECT_URL" >> $GITHUB_OUTPUT
           echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
@@ -169,7 +187,7 @@ jobs:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           body: |
             **Deploy to Vercel**
-            
+
             | Name | Status | Preview | Latest Commit | Updated (JST) |
             | :--- | :----- | :------ | :------------ | :------------ |
             | **${{ needs.deploy-preview.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy-preview.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy-preview.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |

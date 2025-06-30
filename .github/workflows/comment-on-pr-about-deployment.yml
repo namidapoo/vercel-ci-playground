@@ -26,11 +26,11 @@ jobs:
         id: get-status
         run: |
           set -e
-          
+
           # Get deployments for the environment
           DEPLOYMENTS=$(gh api -H "Accept: application/vnd.github.v3+json" \
             "/repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }}" || echo "[]")
-          
+
           # Check if any deployments exist
           if [ "$(echo "$DEPLOYMENTS" | jq 'length')" -eq 0 ]; then
             echo "state=" >> $GITHUB_OUTPUT
@@ -39,14 +39,14 @@ jobs:
             echo "project_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           # Get the latest deployment ID
           DEP_ID=$(echo "$DEPLOYMENTS" | jq -r '.[0].id')
-          
+
           # Get deployment statuses
           STATUSES=$(gh api -H "Accept: application/vnd.github.v3+json" \
             "/repos/${{ github.repository }}/deployments/${DEP_ID}/statuses" || echo "[]")
-          
+
           # Check if any statuses exist
           if [ "$(echo "$STATUSES" | jq 'length')" -eq 0 ]; then
             echo "state=" >> $GITHUB_OUTPUT
@@ -55,16 +55,16 @@ jobs:
             echo "project_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           # Get the latest status
           LATEST_STATUS=$(echo "$STATUSES" | jq '.[0]')
           STATE=$(echo "$LATEST_STATUS" | jq -r '.state')
           URL=$(echo "$LATEST_STATUS" | jq -r '.environment_url // ""')
           DESCRIPTION=$(echo "$LATEST_STATUS" | jq -r '.description // ""')
-          
+
           echo "state=$STATE" >> $GITHUB_OUTPUT
           echo "url=$URL" >> $GITHUB_OUTPUT
-          
+
           # Extract inspect URL and project name from description
           if [[ "$DESCRIPTION" == inspect:* ]]; then
             # Extract inspect URL: inspect:URL|project:NAME format
@@ -100,7 +100,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Find Comment
         uses: peter-evans/find-comment@v2
         id: fc
@@ -126,7 +126,7 @@ jobs:
           edit-mode: replace
           body: |
             **Deploy to Vercel**
-            
+
             | Name | Status | Preview | Latest Commit | Updated (JST) |
             | :--- | :----- | :------ | :------------ | :------------ |
             | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ${{
