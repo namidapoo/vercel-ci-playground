@@ -27,9 +27,12 @@ jobs:
         run: |
           set -e
 
+          # 汎用的なURLエンコーディング：jqの@uriフィルターを使用
+          ENCODED_ENV_NAME=$(echo "${{ env.ENV_NAME }}" | jq -Rr @uri)
+
           # Get deployments for the environment
           DEPLOYMENTS=$(gh api -H "Accept: application/vnd.github.v3+json" \
-            "/repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }}" || echo "[]")
+            "/repos/${{ github.repository }}/deployments?environment=${ENCODED_ENV_NAME}" || echo "[]")
 
           # Check if any deployments exist
           if [ "$(echo "$DEPLOYMENTS" | jq 'length')" -eq 0 ]; then
@@ -118,6 +121,34 @@ jobs:
           SHORT_SHA="${{ github.event.pull_request.head.sha }}"
           echo "short_sha=${SHORT_SHA:0:7}" >> $GITHUB_OUTPUT
 
+      - name: Prepare comment variables
+        id: prepare-comment
+        run: |
+          STATE="${{ needs.check-if-deployment-exists.outputs.state }}"
+          INSPECT_URL="${{ needs.check-if-deployment-exists.outputs.inspect_url }}"
+          PREVIEW_URL="${{ needs.check-if-deployment-exists.outputs.url }}"
+
+          # Prepare status column
+          if [ "$STATE" = "success" ]; then
+            if [ -n "$INSPECT_URL" ]; then
+              STATUS="✅ Ready ([Inspect]($INSPECT_URL))"
+            else
+              STATUS="✅ Ready"
+            fi
+          else
+            STATUS="⏳ In Progress"
+          fi
+
+          # Prepare preview column
+          if [ "$STATE" = "success" ] && [ -n "$PREVIEW_URL" ]; then
+            PREVIEW="[Visit Preview]($PREVIEW_URL)"
+          else
+            PREVIEW="-"
+          fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "preview=$PREVIEW" >> $GITHUB_OUTPUT
+
       - name: Create or update deployment comment
         uses: peter-evans/create-or-update-comment@v2
         with:
@@ -129,13 +160,4 @@ jobs:
 
             | Name | Status | Preview | Latest Commit | Updated (JST) |
             | :--- | :----- | :------ | :------------ | :------------ |
-            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ${{
-              needs.check-if-deployment-exists.outputs.state == 'success' && 
-              format('✅ Ready{0}', needs.check-if-deployment-exists.outputs.inspect_url && format(' ([Inspect]({0}))', needs.check-if-deployment-exists.outputs.inspect_url) || '') ||
-              needs.check-if-deployment-exists.outputs.state == 'in_progress' && '⏳ In Progress' ||
-              '⏳ Starting'
-            }} | ${{
-              needs.check-if-deployment-exists.outputs.state == 'success' && 
-              format('[Visit Preview]({0})', needs.check-if-deployment-exists.outputs.url) ||
-              '-'
-            }} | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
+            | **${{ needs.check-if-deployment-exists.outputs.project_name }}** | ${{ steps.prepare-comment.outputs.status }} | ${{ steps.prepare-comment.outputs.preview }} | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
