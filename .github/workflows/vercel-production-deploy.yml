@@ -11,7 +11,7 @@ on:
       - main
 
 jobs:
-  Deploy-Production:
+  deploy-production:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -12,7 +12,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-preview:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
     permissions:
@@ -94,7 +94,7 @@ jobs:
           desc: "inspect:${{ steps.deploy-url.outputs.inspect_url }}|project:${{ steps.deploy-url.outputs.project_name }}"
 
   check-if-pr-exists:
-    needs: deploy
+    needs: deploy-preview
     name: Check if associated PR exists
     runs-on: ubuntu-latest
     permissions:
@@ -125,7 +125,7 @@ jobs:
 
   comment:
     needs:
-      - deploy
+      - deploy-preview
       - check-if-pr-exists
     name: Comment on PR
     if: needs.check-if-pr-exists.outputs.pr-number != 0
@@ -164,5 +164,5 @@ jobs:
             
             | Name | Status | Preview | Latest Commit | Updated (JST) |
             | :--- | :----- | :------ | :------------ | :------------ |
-            | **${{ needs.deploy.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
+            | **${{ needs.deploy-preview.outputs.project_name }}** | ✅ Ready ([Inspect](${{ needs.deploy-preview.outputs.inspect_url }})) | [Visit Preview](${{ needs.deploy-preview.outputs.url }}) | `${{ steps.datetime.outputs.short_sha }}` | ${{ steps.datetime.outputs.value }} |
           edit-mode: replace
