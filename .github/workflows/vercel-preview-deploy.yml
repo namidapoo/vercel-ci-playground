@@ -78,8 +78,26 @@ jobs:
           # Inspect URL抽出 
           INSPECT_URL=$(cat deploy_output.txt | grep "Inspect:" | sed 's/.*Inspect: \(https:\/\/vercel\.com\/[^[:space:]]*\).*/\1/' || true)
 
-          # プロジェクト名抽出
-          PROJECT_NAME=$(cat deploy_output.txt | grep "To deploy to production" | sed 's/.*(\([^)]*\)\.vercel\.app).*/\1/' || true)
+          # プロジェクト名抽出（フォールバック戦略）
+          PROJECT_NAME=""
+
+          # deploy行から抽出
+          FROM_DEPLOY_LINE=$(cat deploy_output.txt | grep -o '[a-zA-Z0-9-]*-projects/[a-zA-Z0-9-]*' | cut -d'/' -f2 | head -1 || true)
+
+          # Inspect URLから抽出
+          FROM_INSPECT_URL_SED=$(echo "$INSPECT_URL" | sed 's/.*\/\([^\/]*\)\/\([^\/]*\)\/[^\/]*$/\2/' || true)
+          FROM_INSPECT_URL_AWK=$(echo "$INSPECT_URL" | awk -F'/' '{print $(NF-1)}' || true)
+
+          # フォールバック戦略で決定
+          if [ -n "$FROM_DEPLOY_LINE" ]; then
+            PROJECT_NAME="$FROM_DEPLOY_LINE"
+          elif [ -n "$FROM_INSPECT_URL_SED" ]; then
+            PROJECT_NAME="$FROM_INSPECT_URL_SED"
+          elif [ -n "$FROM_INSPECT_URL_AWK" ]; then
+            PROJECT_NAME="$FROM_INSPECT_URL_AWK"
+          else
+            PROJECT_NAME="${{ github.event.repository.name }}"
+          fi
 
           echo "Preview URL: $PREVIEW_URL"
           echo "Inspect URL: $INSPECT_URL"
