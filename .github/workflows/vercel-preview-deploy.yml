@@ -50,6 +50,14 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm add -g vercel@latest
 
+      - name: Cache Vercel CLI
+        uses: actions/cache@v4
+        with:
+          path: ~/.vercel
+          key: vercel-${{ runner.os }}-${{ hashFiles('**/vercel.json', '**/package.json') }}
+          restore-keys: |
+            vercel-${{ runner.os }}-
+
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
         continue-on-error: false
