@@ -130,11 +130,11 @@ jobs:
     steps:
       - name: Get associated PRs
         id: prs
-        run: >
-          echo "pulls=$(gh api -H "Accept: application/vnd.github.v3+json" -X GET
-          /repos/${{ github.repository }}/pulls
-          -f state=open
-          -f head=${{ github.repository_owner }}:${{ github.ref_name }})" >> $GITHUB_OUTPUT
+        run: |
+          # 汎用的なURLエンコーディング：jqの@uriフィルターを使用
+          ENCODED_REF_NAME=$(echo "${{ github.ref_name }}" | jq -Rr @uri)
+          echo "pulls=$(gh api -H "Accept: application/vnd.github.v3+json" -X GET \
+            "/repos/${{ github.repository }}/pulls?state=open&head=${{ github.repository_owner }}:${ENCODED_REF_NAME}")" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ github.token }}
 

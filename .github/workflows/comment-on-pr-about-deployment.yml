@@ -27,9 +27,12 @@ jobs:
         run: |
           set -e
 
+          # 汎用的なURLエンコーディング：jqの@uriフィルターを使用
+          ENCODED_ENV_NAME=$(echo "${{ env.ENV_NAME }}" | jq -Rr @uri)
+
           # Get deployments for the environment
           DEPLOYMENTS=$(gh api -H "Accept: application/vnd.github.v3+json" \
-            "/repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }}" || echo "[]")
+            "/repos/${{ github.repository }}/deployments?environment=${ENCODED_ENV_NAME}" || echo "[]")
 
           # Check if any deployments exist
           if [ "$(echo "$DEPLOYMENTS" | jq 'length')" -eq 0 ]; then
